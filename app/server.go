@@ -18,23 +18,25 @@ func main() {
 	}
 	defer l.Close()
 
-	con, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
-	}
-	defer con.Close()
-
-	data := make([]byte, 256)
-	resp := "+PONG\r\n"
+	// EVENT LOOP
 	for {
-		_, err = con.Read(data)
-		if errors.Is(err, io.EOF) {
-			fmt.Println("Done")
-			return
+		con, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
 		}
-		con.Write([]byte(resp))
-		str := string(data)
-		fmt.Println(str)
+		go func(con net.Conn) {
+			defer con.Close()
+
+			data := make([]byte, 256)
+			resp := "+PONG\r\n"
+			for {
+				_, err = con.Read(data)
+				if errors.Is(err, io.EOF) {
+					return
+				}
+				con.Write([]byte(resp))
+			}
+		}(con)
 	}
 }
