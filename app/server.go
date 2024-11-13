@@ -6,7 +6,9 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 var _m = make(map[string]string)
@@ -21,13 +23,38 @@ func echo(input []string) ([]byte, error) {
 	return []byte(text), nil
 }
 
+func expire(key string, ms int) {
+	time.Sleep(time.Duration(ms) * time.Millisecond)
+	delete(_m, key)
+}
+
 func set(input []string) ([]byte, error) {
-	if len(input) < 4 {
+	if len(input) != 4 && len(input) != 8 {
 		return nil, errors.ErrUnsupported
 	}
+
+	px := 0
+	if len(input) == 8 {
+		if strings.ToUpper(input[5][:]) != "PX" {
+			return nil, errors.ErrUnsupported
+		}
+		var err error
+		px, err = strconv.Atoi(input[7][:])
+		if err != nil {
+			return nil, errors.ErrUnsupported
+		}
+		if px == 0 {
+			return nil, errors.ErrUnsupported
+		}
+	}
+
 	key := input[1][:]
 	value := input[3][:]
 	_m[key] = value
+
+	if px != 0 {
+		go expire(key, px)
+	}
 	return []byte("+OK\r\n"), nil
 }
 
@@ -47,7 +74,14 @@ func get(input []string) ([]byte, error) {
 }
 
 func respParser(data []byte) ([]byte, error) {
-	input_array := strings.Split(string(data), "\r\n")
+
+	str := string(data)
+	str = strings.TrimSpace(str)
+	input_array := strings.Split(str, "\r\n")
+	// Remove Trailing Empty
+	if len(input_array) > 0 {
+		input_array = input_array[:len(input_array)-1]
+	}
 
 	cmd := strings.ToUpper(input_array[2*1][:])
 	switch cmd {
