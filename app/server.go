@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+var _m = make(map[string]string)
+
 func ping() ([]byte, error) {
 	resp := "+PONG\r\n"
 	return []byte(resp), nil
@@ -17,6 +19,31 @@ func ping() ([]byte, error) {
 func echo(input []string) ([]byte, error) {
 	text := "+" + input[1][:] + "\r\n"
 	return []byte(text), nil
+}
+
+func set(input []string) ([]byte, error) {
+	if len(input) < 4 {
+		return nil, errors.ErrUnsupported
+	}
+	key := input[1][:]
+	value := input[3][:]
+	_m[key] = value
+	return []byte("+OK\r\n"), nil
+}
+
+func get(input []string) ([]byte, error) {
+	if len(input) < 2 {
+		return nil, errors.ErrUnsupported
+	}
+	key := input[1][:]
+	value, ok := _m[key]
+	if ok {
+		resp := fmt.Sprintf("$%v\r\n%v\r\n", len(value), value)
+		fmt.Println(resp)
+		return []byte(resp), nil
+	}
+	return []byte("$-1\r\n"), nil
+
 }
 
 func respParser(data []byte) ([]byte, error) {
@@ -28,6 +55,10 @@ func respParser(data []byte) ([]byte, error) {
 		return echo(input_array[3:])
 	case "PING":
 		return ping()
+	case "SET":
+		return set(input_array[3:])
+	case "GET":
+		return get(input_array[3:])
 	default:
 		return nil, errors.ErrUnsupported
 	}
