@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -73,6 +74,49 @@ func get(input []string) ([]byte, error) {
 
 }
 
+func config(input []string) ([]byte, error) {
+	switch input[1][:] {
+	case "GET":
+		return configGet(input[2:])
+	// case "SET":
+	// 	return configSet(input[2:])
+	default:
+		return nil, errors.ErrUnsupported
+	}
+}
+
+func configGet(input []string) ([]byte, error) {
+	var resp []string
+	switch input[1][:] {
+	case "dir":
+		resp = append(resp, "dir")
+		resp = append(resp, dir)
+		return []byte(encodeRESPArray(resp)), nil
+	case "dbfilename":
+		resp = append(resp, "dbfilename")
+		resp = append(resp, dbfilename)
+		return []byte(encodeRESPArray(resp)), nil
+	default:
+		return nil, errors.ErrUnsupported
+	}
+}
+
+// func configSet(input []string) ([]byte, error) {
+
+// }
+
+func encodeRESPArray(data []string) string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("*%d\r\n", len(data)))
+
+	for _, item := range data {
+		sb.WriteString(fmt.Sprintf("$%d\r\n%s\r\n", len(item), item))
+	}
+
+	return sb.String()
+}
+
 func respParser(data []byte) ([]byte, error) {
 
 	str := string(data)
@@ -93,12 +137,20 @@ func respParser(data []byte) ([]byte, error) {
 		return set(input_array[3:])
 	case "GET":
 		return get(input_array[3:])
+	case "CONFIG":
+		return config(input_array[3:])
 	default:
 		return nil, errors.ErrUnsupported
 	}
 }
 
+var dir, dbfilename string
+
 func main() {
+	flag.StringVar(&dir, "dir", "/tmp/redis-data", "Directory to store RDB snapshot")
+	flag.StringVar(&dbfilename, "dbfilename", "rdbfile", "RDB Filename")
+	flag.Parse()
+
 	fmt.Println("Logs from your program will appear here!")
 
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
