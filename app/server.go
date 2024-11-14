@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"errors"
 	"flag"
 	"fmt"
@@ -24,7 +25,7 @@ func echo(input []string) ([]byte, error) {
 	return []byte(text), nil
 }
 
-func expire(key string, ms int) {
+func expire(key string, ms int64) {
 	time.Sleep(time.Duration(ms) * time.Millisecond)
 	delete(_m, key)
 }
@@ -54,7 +55,7 @@ func set(input []string) ([]byte, error) {
 	_m[key] = value
 
 	if px != 0 {
-		go expire(key, px)
+		go expire(key, int64(px))
 	}
 	return []byte("+OK\r\n"), nil
 }
@@ -121,13 +122,32 @@ func loadRDB(dir string, dbfilename string) error {
 	hash_table_size := int(b[0])
 	file.Read(b)
 
-	// expiry_table_size := int(b[0])
-	// TODO : IMPLEMENT EXPIRY KEY RDB READING
-	
 	for i := 0; i < hash_table_size; i++ {
 		// TODO : SUPPORT MULTIPLE KEY TYPES
 		file.Read(b)
+		expiry := false
+		ms := int64(0)
+		fmt.Println(b[0])
+		if b[0] == 0xFC {
+			expiry = true
 
+			timestamp_buffer := make([]byte, 8)
+			file.Read(timestamp_buffer)
+			givenTime := binary.LittleEndian.Uint64(timestamp_buffer)
+			currentTime := time.Now().UnixMilli()
+			ms = int64(givenTime) - currentTime
+		} else if b[0] == 0xfd {
+			expiry = true
+
+			timestamp_buffer := make([]byte, 4)
+			file.Read(timestamp_buffer)
+			givenTime := binary.LittleEndian.Uint64(timestamp_buffer)
+			currentTime := time.Now().Unix()
+			ms = int64(givenTime) - currentTime
+		}
+		if expiry {
+			file.Read(b)
+		}
 		file.Read(b)
 		key_buffer := make([]byte, int(b[0]))
 		file.Read(key_buffer)
@@ -135,6 +155,9 @@ func loadRDB(dir string, dbfilename string) error {
 		value_buffer := make([]byte, int(b[0]))
 		file.Read(value_buffer)
 		_m[string(key_buffer)] = string(value_buffer)
+		if expiry {
+			go expire(string(key_buffer), ms)
+		}
 	}
 	return nil
 }
