@@ -68,7 +68,6 @@ func get(input []string) ([]byte, error) {
 	value, ok := _m[key]
 	if ok {
 		resp := fmt.Sprintf("$%v\r\n%v\r\n", len(value), value)
-		fmt.Println(resp)
 		return []byte(resp), nil
 	}
 	return []byte("$-1\r\n"), nil
@@ -127,7 +126,6 @@ func loadRDB(dir string, dbfilename string) error {
 		file.Read(b)
 		expiry := false
 		ms := int64(0)
-		fmt.Println(b[0])
 		if b[0] == 0xFC {
 			expiry = true
 
@@ -169,6 +167,14 @@ func keys(input []string) ([]byte, error) {
 		arr = append(arr, key)
 	}
 	return []byte(encodeRESPArray(arr)), nil
+}
+
+func typecmd(input []string) ([]byte, error) {
+	key := input[1][:]
+	if _, ok := _m[key]; ok {
+		return []byte("+string\r\n"), nil
+	}
+	return []byte("+none\r\n"), nil
 }
 
 func configGet(input []string) ([]byte, error) {
@@ -227,6 +233,8 @@ func respParser(data []byte) ([]byte, error) {
 		return config(input_array[3:])
 	case "KEYS":
 		return keys(input_array[3:])
+	case "TYPE":
+		return typecmd(input_array[3:])
 	default:
 		return nil, errors.ErrUnsupported
 	}
