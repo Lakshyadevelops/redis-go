@@ -85,6 +85,69 @@ func config(input []string) ([]byte, error) {
 	}
 }
 
+func loadRDB(dir string, dbfilename string) error {
+
+	path := ""
+	if dir[len(dir)-1] == '/' {
+		path = dir + dbfilename
+	} else {
+		path = dir + "/" + dbfilename
+	}
+
+	file, err := os.Open(path)
+	if _, ok := err.(*os.PathError); ok {
+		return os.ErrNotExist
+	}
+	defer file.Close()
+
+	b := make([]byte, 1)
+	// TODO : SUPPORT MULTIPLE DATABASES
+	for {
+		_, err := file.Read(b)
+		if err != nil {
+			if err.Error() == "EOF" {
+				return errors.New("reached end of file without finding 0xFB")
+			} else {
+				return errors.New("error opening file")
+			}
+		}
+
+		if b[0] == 0xFB {
+			break
+		}
+	}
+
+	file.Read(b)
+	hash_table_size := int(b[0])
+	file.Read(b)
+
+	// expiry_table_size := int(b[0])
+	// TODO : IMPLEMENT EXPIRY KEY RDB READING
+	
+	for i := 0; i < hash_table_size; i++ {
+		// TODO : SUPPORT MULTIPLE KEY TYPES
+		file.Read(b)
+
+		file.Read(b)
+		key_buffer := make([]byte, int(b[0]))
+		file.Read(key_buffer)
+		file.Read(b)
+		value_buffer := make([]byte, int(b[0]))
+		file.Read(value_buffer)
+		_m[string(key_buffer)] = string(value_buffer)
+	}
+	return nil
+}
+
+func keys(input []string) ([]byte, error) {
+	// TODO : SUPPORT KEY FILTERING
+	arr := make([]string, 0, 10)
+	for key := range _m {
+		arr = append(arr, key)
+	}
+	return []byte(encodeRESPArray(arr)), nil
+}
+
 func configGet(input []string) ([]byte, error) {
 	var resp []string
 	switch input[1][:] {
@@ -139,6 +202,8 @@ func respParser(data []byte) ([]byte, error) {
 		return get(input_array[3:])
 	case "CONFIG":
 		return config(input_array[3:])
+	case "KEYS":
+		return keys(input_array[3:])
 	default:
 		return nil, errors.ErrUnsupported
 	}
@@ -152,6 +217,13 @@ func main() {
 	flag.Parse()
 
 	fmt.Println("Logs from your program will appear here!")
+
+	err := loadRDB(dir, dbfilename)
+	if err != nil {
+		fmt.Println("Error Loading RDB File")
+	} else {
+		fmt.Println("RDB File loaded succesfully")
+	}
 
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
