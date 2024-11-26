@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/wk8/go-ordered-map"
 	"io"
 	"net"
 	"os"
@@ -14,6 +16,7 @@ import (
 )
 
 var _m = make(map[string]string)
+var _x = make(map[string]*orderedmap.OrderedMap)
 
 func ping() ([]byte, error) {
 	resp := "+PONG\r\n"
@@ -65,13 +68,93 @@ func get(input []string) ([]byte, error) {
 		return nil, errors.ErrUnsupported
 	}
 	key := input[1][:]
-	value, ok := _m[key]
-	if ok {
+	cmdtype, _ := typecmd(input)
+	switch string(cmdtype[1 : len(cmdtype)-2]) {
+	case "string":
+		value := _m[key]
 		resp := fmt.Sprintf("$%v\r\n%v\r\n", len(value), value)
 		return []byte(resp), nil
+	case "stream":
+		return nil, errors.ErrUnsupported
+	default:
+		return []byte("$-1\r\n"), nil
 	}
-	return []byte("$-1\r\n"), nil
+}
 
+func generate_sequence_xadd(timestamp int64, key string) int64 {
+	_, ok := _x[key]
+	if !ok {
+		_x[key] = orderedmap.New()
+		if timestamp == 0 {
+			return 1
+		}
+		return 0
+	}
+	om := _x[key]
+	keyID := om.Newest().Key
+	arr := strings.Split(keyID.(string), "-")
+	timestamp_old, _ := strconv.ParseInt(arr[0], 10, 64)
+	if timestamp_old == timestamp {
+		seq, _ := strconv.ParseInt(arr[1], 10, 64)
+		seq++
+		return seq
+	}
+	return 0
+}
+
+func xadd(input []string) ([]byte, error) {
+	key := input[1][:]
+	timestamp_new := int64(0)
+	sequence_new := int64(0)
+
+	keyID := input[3][:]
+	if keyID == "*" {
+		timestamp_new = time.Now().UnixMilli()
+		sequence_new = generate_sequence_xadd(timestamp_new, key)
+		keyID = strconv.FormatInt(timestamp_new, 10) + "-" + strconv.FormatInt(sequence_new, 10)
+	} else if keyID[len(keyID)-2:] == "-*" {
+		timestamp_new, _ = strconv.ParseInt(keyID[:len(keyID)-2], 10, 64)
+		sequence_new = generate_sequence_xadd(timestamp_new, key)
+		keyID = strconv.FormatInt(timestamp_new, 10) + "-" + strconv.FormatInt(sequence_new, 10)
+	} else {
+		array_new := strings.Split(keyID, "-")
+		timestamp_new, _ = strconv.ParseInt(array_new[0], 10, 64)
+		sequence_new, _ = strconv.ParseInt(array_new[1], 10, 64)
+	}
+	
+	if timestamp_new < 0 || sequence_new < 0 || (timestamp_new == 0 && sequence_new == 0) {
+		return []byte("-ERR The ID specified in XADD must be greater than 0-0\r\n"), nil
+	}
+
+	value := make([]string, 0, 10)
+	for i := 5; i < len(input); i += 2 {
+		value = append(value, input[i])
+	}
+	serialized, err := json.Marshal(value)
+	if err != nil {
+		return nil, errors.New("error serializing")
+	}
+	_, ok := _x[key]
+	if !ok {
+		_x[key] = orderedmap.New()
+	}
+	om := _x[key]
+	pair := om.Newest()
+
+	timestamp_old := int64(0)
+	sequence_old := int64(0)
+	if pair != nil {
+		array_old := strings.Split(pair.Key.(string), "-")
+		timestamp_old, err = strconv.ParseInt(array_old[0], 10, 64)
+		sequence_old, err = strconv.ParseInt(array_old[1], 10, 64)
+	}
+	if timestamp_new < timestamp_old || (timestamp_new == timestamp_old && sequence_new <= sequence_old) {
+		return []byte("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n"), nil
+	}
+
+	_x[key].Set(keyID, serialized)
+	resp := fmt.Sprintf("$%v\r\n%v\r\n", len(keyID), keyID)
+	return []byte(resp), nil
 }
 
 func config(input []string) ([]byte, error) {
@@ -174,6 +257,9 @@ func typecmd(input []string) ([]byte, error) {
 	if _, ok := _m[key]; ok {
 		return []byte("+string\r\n"), nil
 	}
+	if _, ok := _x[key]; ok {
+		return []byte("+stream\r\n"), nil
+	}
 	return []byte("+none\r\n"), nil
 }
 
@@ -235,6 +321,8 @@ func respParser(data []byte) ([]byte, error) {
 		return keys(input_array[3:])
 	case "TYPE":
 		return typecmd(input_array[3:])
+	case "XADD":
+		return xadd(input_array[3:])
 	default:
 		return nil, errors.ErrUnsupported
 	}
