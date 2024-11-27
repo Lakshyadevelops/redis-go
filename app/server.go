@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +18,13 @@ import (
 
 var _m = make(map[string]string)
 var _x = make(map[string]*orderedmap.OrderedMap)
-var _role role = MASTER
+var _info info
+
+type info struct {
+	Role               role
+	Master_replid      string
+	Master_repl_offset int64
+}
 
 type role string
 
@@ -283,10 +290,19 @@ func type_impl(input []string) string {
 	return "NONE"
 }
 
-func info(input []string) ([]byte, error) {
-	// TODO : implement better info
+func info_cmd(input []string) ([]byte, error) {
+	// TODO : implement input parsing and returning only relevant fields
 
-	item := fmt.Sprintf("role:%v", _role)
+	val := reflect.ValueOf(_info)
+	typ := val.Type()
+	infos := make([]string, 0, 10)
+
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		fieldType := typ.Field(i)
+		infos = append(infos, fmt.Sprintf("%s:%v", strings.ToLower(fieldType.Name), field.Interface()))
+	}
+	item := strings.Join(infos, " ")
 	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(item), item)), nil
 }
 
@@ -351,7 +367,7 @@ func respParser(data []byte) ([]byte, error) {
 	case "XADD":
 		return xadd(input_array[3:])
 	case "INFO":
-		return info(input_array[3:])
+		return info_cmd(input_array[3:])
 	default:
 		return nil, errors.ErrUnsupported
 	}
@@ -368,8 +384,12 @@ func main() {
 
 	flag.Parse()
 	if replicaof != "" {
-		_role = SLAVE
+		_info.Role = SLAVE
+	} else {
+		_info.Role = MASTER
 	}
+	// TODO : Master_replid generation
+	_info.Master_replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
 
 	fmt.Println("Logs from your program will appear here!")
 
