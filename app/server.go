@@ -253,14 +253,26 @@ func keys(input []string) ([]byte, error) {
 }
 
 func typecmd(input []string) ([]byte, error) {
+	key_type := type_impl(input)
+	switch key_type {
+	case "STRING":
+		return []byte("+string\r\n"), nil
+	case "STREAM":
+		return []byte("+stream\r\n"), nil
+	default:
+		return []byte("+none\r\n"), nil
+	}
+}
+
+func type_impl(input []string) string {
 	key := input[1][:]
 	if _, ok := _m[key]; ok {
-		return []byte("+string\r\n"), nil
+		return "STRING"
 	}
 	if _, ok := _x[key]; ok {
-		return []byte("+stream\r\n"), nil
+		return "STREAM"
 	}
-	return []byte("+none\r\n"), nil
+	return "NONE"
 }
 
 func configGet(input []string) ([]byte, error) {
