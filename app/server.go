@@ -121,7 +121,7 @@ func xadd(input []string) ([]byte, error) {
 		timestamp_new, _ = strconv.ParseInt(array_new[0], 10, 64)
 		sequence_new, _ = strconv.ParseInt(array_new[1], 10, 64)
 	}
-	
+
 	if timestamp_new < 0 || sequence_new < 0 || (timestamp_new == 0 && sequence_new == 0) {
 		return []byte("-ERR The ID specified in XADD must be greater than 0-0\r\n"), nil
 	}
@@ -341,10 +341,13 @@ func respParser(data []byte) ([]byte, error) {
 }
 
 var dir, dbfilename string
+var port int
 
 func main() {
 	flag.StringVar(&dir, "dir", "/tmp/redis-data", "Directory to store RDB snapshot")
 	flag.StringVar(&dbfilename, "dbfilename", "rdbfile", "RDB Filename")
+	flag.IntVar(&port, "port", 6379, "port to run server")
+
 	flag.Parse()
 
 	fmt.Println("Logs from your program will appear here!")
@@ -356,9 +359,9 @@ func main() {
 		fmt.Println("RDB File loaded succesfully")
 	}
 
-	l, err := net.Listen("tcp", "0.0.0.0:6379")
+	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
-		fmt.Println("Failed to bind to port 6379")
+		fmt.Println(fmt.Sprintf("Failed to bind to port %v", port))
 		os.Exit(1)
 	}
 	defer l.Close()
