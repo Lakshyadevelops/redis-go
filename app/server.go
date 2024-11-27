@@ -17,6 +17,14 @@ import (
 
 var _m = make(map[string]string)
 var _x = make(map[string]*orderedmap.OrderedMap)
+var _role role = MASTER
+
+type role string
+
+const (
+	MASTER role = "master"
+	SLAVE  role = "slave"
+)
 
 func ping() ([]byte, error) {
 	resp := "+PONG\r\n"
@@ -275,6 +283,13 @@ func type_impl(input []string) string {
 	return "NONE"
 }
 
+func info(input []string) ([]byte, error) {
+	// TODO : implement better info
+
+	item := fmt.Sprintf("role:%v", _role)
+	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(item), item)), nil
+}
+
 func configGet(input []string) ([]byte, error) {
 	var resp []string
 	switch input[1][:] {
@@ -335,6 +350,8 @@ func respParser(data []byte) ([]byte, error) {
 		return typecmd(input_array[3:])
 	case "XADD":
 		return xadd(input_array[3:])
+	case "INFO":
+		return info(input_array[3:])
 	default:
 		return nil, errors.ErrUnsupported
 	}
