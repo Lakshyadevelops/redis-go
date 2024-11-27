@@ -357,15 +357,19 @@ func respParser(data []byte) ([]byte, error) {
 	}
 }
 
-var dir, dbfilename string
+var dir, dbfilename, replicaof string
 var port int
 
 func main() {
 	flag.StringVar(&dir, "dir", "/tmp/redis-data", "Directory to store RDB snapshot")
 	flag.StringVar(&dbfilename, "dbfilename", "rdbfile", "RDB Filename")
 	flag.IntVar(&port, "port", 6379, "port to run server")
+	flag.StringVar(&replicaof, "replicaof", "", "<MASTER_HOST> <MASTER_PORT>")
 
 	flag.Parse()
+	if replicaof != "" {
+		_role = SLAVE
+	}
 
 	fmt.Println("Logs from your program will appear here!")
 
