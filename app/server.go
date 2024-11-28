@@ -338,6 +338,14 @@ func encodeRESPArray(data []string) string {
 	return sb.String()
 }
 
+func replconf_cmd(input []string) ([]byte, error) {
+	return []byte("+OK\r\n"), nil
+}
+
+func psync_cmd(input []string) ([]byte, error) {
+	return []byte(fmt.Sprintf("+FULLRESYNC %v %v\r\n", _info.Master_replid, _info.Master_repl_offset)), nil
+}
+
 func respParser(data []byte) ([]byte, error) {
 
 	str := string(data)
@@ -368,6 +376,10 @@ func respParser(data []byte) ([]byte, error) {
 		return xadd(input_array[3:])
 	case "INFO":
 		return info_cmd(input_array[3:])
+	case "REPLCONF":
+		return replconf_cmd(input_array[3:])
+	case "PSYNC":
+		return psync_cmd(input_array[3:])
 	default:
 		return nil, errors.ErrUnsupported
 	}
@@ -400,9 +412,38 @@ func main() {
 		fmt.Println("RDB File loaded succesfully")
 	}
 
+	if _info.Role == SLAVE {
+		arr := strings.Split(replicaof, " ")
+		master_host := arr[0]
+		master_port := arr[1]
+		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", master_host, master_port))
+		if err != nil {
+			fmt.Println("Error connecting to Master")
+			os.Exit(1)
+		}
+		defer conn.Close()
+
+		s := "*1\r\n$4\r\nPING\r\n"
+		conn.Write([]byte(s))
+		sa := []string{"REPLCONF", "listening-port", strconv.Itoa(port)}
+		buffer := make([]byte, 512)
+		conn.Read(buffer)
+
+		conn.Write([]byte(encodeRESPArray(sa)))
+		conn.Read(buffer)
+
+		sa = []string{"REPLCONF", "capa", "psync2"}
+		conn.Write([]byte(encodeRESPArray(sa)))
+		conn.Read(buffer)
+
+		sa = []string{"PSYNC", "?", "-1"}
+		conn.Write([]byte(encodeRESPArray(sa)))
+		conn.Read(buffer)
+	}
+
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Failed to bind to port %v", port))
+		fmt.Printf("Failed to bind to port %v", port)
 		os.Exit(1)
 	}
 	defer l.Close()
