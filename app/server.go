@@ -34,12 +34,12 @@ const (
 	SLAVE  role = "slave"
 )
 
-func ping() ([]byte, error) {
+func ping_cmd() ([]byte, error) {
 	resp := "+PONG\r\n"
 	return []byte(resp), nil
 }
 
-func echo(input []string) ([]byte, error) {
+func echo_cmd(input []string) ([]byte, error) {
 	text := "+" + input[1][:] + "\r\n"
 	return []byte(text), nil
 }
@@ -49,7 +49,7 @@ func expire(key string, ms int64) {
 	delete(_m, key)
 }
 
-func set(input []string) ([]byte, error) {
+func set_cmd(input []string) ([]byte, error) {
 	if len(input) != 4 && len(input) != 8 {
 		return nil, errors.ErrUnsupported
 	}
@@ -79,7 +79,7 @@ func set(input []string) ([]byte, error) {
 	return []byte("+OK\r\n"), nil
 }
 
-func get(input []string) ([]byte, error) {
+func get_cmd(input []string) ([]byte, error) {
 	if len(input) < 2 {
 		return nil, errors.ErrUnsupported
 	}
@@ -118,7 +118,7 @@ func generate_sequence_xadd(timestamp int64, key string) int64 {
 	return 0
 }
 
-func xadd(input []string) ([]byte, error) {
+func xadd_cmd(input []string) ([]byte, error) {
 	key := input[1][:]
 	timestamp_new := int64(0)
 	sequence_new := int64(0)
@@ -173,7 +173,7 @@ func xadd(input []string) ([]byte, error) {
 	return []byte(resp), nil
 }
 
-func config(input []string) ([]byte, error) {
+func config_cmd(input []string) ([]byte, error) {
 	switch input[1][:] {
 	case "GET":
 		return configGet(input[2:])
@@ -259,7 +259,7 @@ func loadRDB(dir string, dbfilename string) error {
 	return nil
 }
 
-func keys(input []string) ([]byte, error) {
+func keys_cmd(input []string) ([]byte, error) {
 	// TODO : SUPPORT KEY FILTERING
 	arr := make([]string, 0, 10)
 	for key := range _m {
@@ -345,7 +345,7 @@ func replconf_cmd(input []string) ([]byte, error) {
 
 func psync_cmd(input []string) ([]byte, error) {
 	// TO DO : Allow Sending Any RDB
-	
+
 	// SAMPLE RDB
 	rdb := "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
 	decodedBytes, _ := hex.DecodeString(rdb)
@@ -369,21 +369,21 @@ func respParser(data []byte) ([]byte, error) {
 	cmd := strings.ToUpper(input_array[2*1][:])
 	switch cmd {
 	case "ECHO":
-		return echo(input_array[3:])
+		return echo_cmd(input_array[3:])
 	case "PING":
-		return ping()
+		return ping_cmd()
 	case "SET":
-		return set(input_array[3:])
+		return set_cmd(input_array[3:])
 	case "GET":
-		return get(input_array[3:])
+		return get_cmd(input_array[3:])
 	case "CONFIG":
-		return config(input_array[3:])
+		return config_cmd(input_array[3:])
 	case "KEYS":
-		return keys(input_array[3:])
+		return keys_cmd(input_array[3:])
 	case "TYPE":
 		return typecmd(input_array[3:])
 	case "XADD":
-		return xadd(input_array[3:])
+		return xadd_cmd(input_array[3:])
 	case "INFO":
 		return info_cmd(input_array[3:])
 	case "REPLCONF":
